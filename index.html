@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ellerslie School AI - ESAI-Alpha-1</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Authentication Screen -->
+        <div id="auth-screen" class="auth-container">
+            <div class="auth-card">
+                <div class="auth-header">
+                    <div class="ai-logo">
+                        <i class="fas fa-brain"></i>
+                    </div>
+                    <h1>Ellerslie School AI</h1>
+                    <p class="subtitle">Powered by ESAI-Alpha-1</p>
+                </div>
+                
+                <div class="auth-tabs">
+                    <button class="tab-btn active" data-tab="login">Login</button>
+                    <button class="tab-btn" data-tab="signup">Sign Up</button>
+                </div>
+                
+                <form id="login-form" class="auth-form active">
+                    <div class="form-group">
+                        <label for="login-username">Username</label>
+                        <input type="text" id="login-username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">Password</label>
+                        <input type="password" id="login-password" required>
+                    </div>
+                    <button type="submit" class="auth-btn">Login</button>
+                </form>
+                
+                <form id="signup-form" class="auth-form">
+                    <div class="form-group">
+                        <label for="signup-username">Username</label>
+                        <input type="text" id="signup-username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signup-password">Password</label>
+                        <input type="password" id="signup-password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm-password">Confirm Password</label>
+                        <input type="password" id="confirm-password" required>
+                    </div>
+                    <button type="submit" class="auth-btn">Sign Up</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Main AI Interface -->
+        <div id="main-screen" class="main-container hidden">
+            <header class="app-header">
+                <div class="header-left">
+                    <div class="ai-logo">
+                        <i class="fas fa-brain"></i>
+                    </div>
+                    <div class="header-info">
+                        <h1>Ellerslie School AI</h1>
+                        <span class="model-badge">ESAI-Alpha-1</span>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <span class="user-info">Welcome, <span id="current-user"></span></span>
+                    <button id="logout-btn" class="logout-btn">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </header>
+
+            <div class="app-layout">
+                <!-- Sidebar for Chat Management -->
+                <aside class="sidebar">
+                    <div class="sidebar-header">
+                        <button id="new-chat-btn" class="new-chat-btn">
+                            <i class="fas fa-plus"></i>
+                            New Chat
+                        </button>
+                    </div>
+                    <div class="chat-list" id="chat-list">
+                        <!-- Chat items will be dynamically added here -->
+                    </div>
+                </aside>
+
+                <!-- Main Chat Area -->
+                <main class="chat-container">
+                    <div class="chat-header">
+                        <h2 id="current-chat-title">New Chat</h2>
+                        <div class="chat-actions">
+                            <button id="web-search-toggle" class="action-btn" title="Enable Web Search">
+                                <i class="fas fa-globe"></i>
+                            </button>
+                            <button id="code-mode-toggle" class="action-btn" title="Code Generation Mode">
+                                <i class="fas fa-code"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="chat-messages" id="chat-messages">
+                        <div class="welcome-message">
+                            <div class="ai-avatar">
+                                <i class="fas fa-robot"></i>
+                            </div>
+                            <div class="message-content">
+                                <p>Hello! I'm ESAI-Alpha-1, created by The Ellerslie School AI Company. How can I assist you today?</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="disclaimer">
+                        <i class="fas fa-info-circle"></i>
+                        AI may get some stuff wrong. Please verify important information.
+                    </div>
+                    
+                    <div class="chat-input-container">
+                        <div class="input-wrapper">
+                            <input type="text" id="message-input" placeholder="Type your message here..." autocomplete="off">
+                            <button id="stop-btn" class="stop-btn hidden" title="Stop AI Response">
+                                <i class="fas fa-stop"></i>
+                            </button>
+                            <button id="send-btn" class="send-btn">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </main>
+            </div>
+
+            <!-- Code Generation Modal -->
+            <div id="code-modal" class="modal hidden">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Code Generation</h3>
+                        <button id="close-code-modal" class="close-btn">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="code-editor">
+                            <div class="code-toolbar">
+                                <select id="language-select">
+                                    <option value="javascript">JavaScript</option>
+                                    <option value="python">Python</option>
+                                    <option value="html">HTML</option>
+                                    <option value="css">CSS</option>
+                                    <option value="java">Java</option>
+                                    <option value="cpp">C++</option>
+                                    <option value="sql">SQL</option>
+                                </select>
+                                <button id="copy-code" class="copy-btn">
+                                    <i class="fas fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <pre><code id="code-output"></code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
