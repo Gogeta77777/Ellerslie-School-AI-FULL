@@ -1,10 +1,18 @@
 // Global variables
 let currentUser = null;
 let isTyping = false;
+let currentChatId = null;
+let chats = [];
+let typingInterval = null;
+let webSearchEnabled = false;
+let codeModeEnabled = false;
 
 // API Configuration
 const GEMINI_API_KEY = 'AIzaSyCVqKHmBKSuHjy0uaZ5UJTzbBX66sfafWo';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+
+// Web Search API (using a simple search suggestion API)
+const WEB_SEARCH_URL = 'https://api.duckduckgo.com/';
 
 // DOM Elements
 const authScreen = document.getElementById('auth-screen');
@@ -18,6 +26,17 @@ const logoutBtn = document.getElementById('logout-btn');
 const chatMessages = document.getElementById('chat-messages');
 const messageInput = document.getElementById('message-input');
 const sendBtn = document.getElementById('send-btn');
+const stopBtn = document.getElementById('stop-btn');
+const newChatBtn = document.getElementById('new-chat-btn');
+const chatList = document.getElementById('chat-list');
+const currentChatTitle = document.getElementById('current-chat-title');
+const webSearchToggle = document.getElementById('web-search-toggle');
+const codeModeToggle = document.getElementById('code-mode-toggle');
+const codeModal = document.getElementById('code-modal');
+const closeCodeModal = document.getElementById('close-code-modal');
+const codeOutput = document.getElementById('code-output');
+const languageSelect = document.getElementById('language-select');
+const copyCodeBtn = document.getElementById('copy-code');
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', function() {
@@ -30,6 +49,7 @@ function initializeApp() {
     const savedUser = localStorage.getItem('currentUser');
     if (savedUser) {
         currentUser = JSON.parse(savedUser);
+        loadChats();
         showMainScreen();
     } else {
         showAuthScreen();
@@ -48,12 +68,32 @@ function setupEventListeners() {
     // Logout
     logoutBtn.addEventListener('click', handleLogout);
     
-    // Send message
+    // Chat functionality
     sendBtn.addEventListener('click', sendMessage);
+    stopBtn.addEventListener('click', stopTyping);
     messageInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             sendMessage();
+        }
+    });
+    
+    // Chat management
+    newChatBtn.addEventListener('click', createNewChat);
+    
+    // Feature toggles
+    webSearchToggle.addEventListener('click', toggleWebSearch);
+    codeModeToggle.addEventListener('click', toggleCodeMode);
+    
+    // Code modal
+    closeCodeModal.addEventListener('click', () => codeModal.classList.add('hidden'));
+    copyCodeBtn.addEventListener('click', copyCode);
+    languageSelect.addEventListener('change', updateCodeSyntax);
+    
+    // Close modal on outside click
+    codeModal.addEventListener('click', function(e) {
+        if (e.target === codeModal) {
+            codeModal.classList.add('hidden');
         }
     });
 }
@@ -77,6 +117,7 @@ function showMainScreen() {
     authScreen.classList.add('hidden');
     mainScreen.classList.remove('hidden');
     currentUserSpan.textContent = currentUser.username;
+    loadChats();
 }
 
 async function handleLogin(e) {
@@ -149,20 +190,154 @@ async function handleSignup(e) {
 function handleLogout() {
     currentUser = null;
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('chats');
+    chats = [];
+    currentChatId = null;
     showAuthScreen();
     showNotification('Logged out successfully', 'success');
 }
 
+// Chat Management Functions
+function createNewChat() {
+    const newChat = {
+        id: Date.now(),
+        title: 'New Chat',
+        messages: [],
+        createdAt: new Date().toISOString(),
+        lastMessage: null
+    };
+    
+    chats.unshift(newChat);
+    currentChatId = newChat.id;
+    saveChats();
+    renderChatList();
+    switchToChat(newChat.id);
+    showNotification('New chat created', 'success');
+}
+
+function switchToChat(chatId) {
+    currentChatId = chatId;
+    const chat = chats.find(c => c.id === chatId);
+    
+    if (chat) {
+        currentChatTitle.textContent = chat.title;
+        renderChatMessages(chat.messages);
+        
+        // Update active chat in sidebar
+        document.querySelectorAll('.chat-item').forEach(item => {
+            item.classList.remove('active');
+        });
+        document.querySelector(`[data-chat-id="${chatId}"]`)?.classList.add('active');
+    }
+}
+
+function deleteChat(chatId) {
+    if (confirm('Are you sure you want to delete this chat?')) {
+        chats = chats.filter(c => c.id !== chatId);
+        
+        if (currentChatId === chatId) {
+            if (chats.length > 0) {
+                switchToChat(chats[0].id);
+            } else {
+                createNewChat();
+            }
+        }
+        
+        saveChats();
+        renderChatList();
+        showNotification('Chat deleted', 'success');
+    }
+}
+
+function renderChatList() {
+    chatList.innerHTML = '';
+    
+    chats.forEach(chat => {
+        const chatItem = document.createElement('div');
+        chatItem.className = 'chat-item';
+        if (chat.id === currentChatId) chatItem.classList.add('active');
+        chatItem.setAttribute('data-chat-id', chat.id);
+        
+        chatItem.innerHTML = `
+            <div class="chat-item-info">
+                <div class="chat-item-title">${chat.title}</div>
+                <div class="chat-item-preview">${chat.lastMessage || 'No messages yet'}</div>
+            </div>
+            <div class="chat-item-actions">
+                <button class="chat-item-btn" onclick="deleteChat(${chat.id})" title="Delete Chat">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `;
+        
+        chatItem.addEventListener('click', (e) => {
+            if (!e.target.closest('.chat-item-actions')) {
+                switchToChat(chat.id);
+            }
+        });
+        
+        chatList.appendChild(chatItem);
+    });
+}
+
+function renderChatMessages(messages) {
+    chatMessages.innerHTML = '';
+    
+    if (messages.length === 0) {
+        chatMessages.innerHTML = `
+            <div class="welcome-message">
+                <div class="ai-avatar">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="message-content">
+                    <p>Hello! I'm ESAI-Alpha-1, created by The Ellerslie School AI Company. How can I assist you today?</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    messages.forEach(message => {
+        addMessageToDOM(message.content, message.sender, false);
+    });
+    
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Message Functions
 async function sendMessage() {
     const message = messageInput.value.trim();
     if (!message || isTyping) return;
     
-    // Add user message to chat
-    addMessage(message, 'user');
+    // Add user message to current chat
+    const userMessage = {
+        content: message,
+        sender: 'user',
+        timestamp: new Date().toISOString()
+    };
+    
+    const currentChat = chats.find(c => c.id === currentChatId);
+    if (currentChat) {
+        currentChat.messages.push(userMessage);
+        currentChat.lastMessage = message;
+        
+        // If this is the first message, generate a title
+        if (currentChat.messages.length === 1) {
+            currentChat.title = await generateChatTitle(message);
+            currentChatTitle.textContent = currentChat.title;
+        }
+        
+        saveChats();
+        renderChatList();
+    }
+    
+    addMessageToDOM(message, 'user');
     messageInput.value = '';
     
-    // Show typing indicator
+    // Show typing indicator and stop button
     showTypingIndicator();
+    stopBtn.classList.remove('hidden');
+    sendBtn.classList.add('hidden');
     
     try {
         // Get AI response
@@ -170,19 +345,37 @@ async function sendMessage() {
         
         // Remove typing indicator
         removeTypingIndicator();
+        stopBtn.classList.add('hidden');
+        sendBtn.classList.remove('hidden');
+        
+        // Add AI response to chat
+        const aiMessage = {
+            content: aiResponse,
+            sender: 'ai',
+            timestamp: new Date().toISOString()
+        };
+        
+        if (currentChat) {
+            currentChat.messages.push(aiMessage);
+            saveChats();
+        }
         
         // Add AI response with typing effect
         addMessageWithTyping(aiResponse, 'ai');
+        
     } catch (error) {
         removeTypingIndicator();
-        addMessage('Sorry, I encountered an error. Please try again.', 'ai');
+        stopBtn.classList.add('hidden');
+        sendBtn.classList.remove('hidden');
+        addMessageToDOM('Sorry, I encountered an error. Please try again.', 'ai');
         console.error('AI Error:', error);
     }
 }
 
-function addMessage(content, sender) {
+function addMessageToDOM(content, sender, animate = true) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${sender}-message`;
+    if (animate) messageDiv.style.animation = 'messageSlideIn 0.3s ease';
     
     const avatar = document.createElement('div');
     avatar.className = `avatar ${sender}-avatar`;
@@ -224,16 +417,26 @@ function typeMessage(element, text) {
     isTyping = true;
     let index = 0;
     
-    const typeInterval = setInterval(() => {
+    typingInterval = setInterval(() => {
         if (index < text.length) {
             element.textContent = text.substring(0, index + 1);
             index++;
             chatMessages.scrollTop = chatMessages.scrollHeight;
         } else {
-            clearInterval(typeInterval);
+            clearInterval(typingInterval);
             isTyping = false;
         }
     }, 30);
+}
+
+function stopTyping() {
+    if (typingInterval) {
+        clearInterval(typingInterval);
+        isTyping = false;
+    }
+    removeTypingIndicator();
+    stopBtn.classList.add('hidden');
+    sendBtn.classList.remove('hidden');
 }
 
 function showTypingIndicator() {
@@ -263,7 +466,39 @@ function removeTypingIndicator() {
     }
 }
 
+// Feature Toggle Functions
+function toggleWebSearch() {
+    webSearchEnabled = !webSearchEnabled;
+    webSearchToggle.classList.toggle('active', webSearchEnabled);
+    showNotification(webSearchEnabled ? 'Web search enabled' : 'Web search disabled', 'info');
+}
+
+function toggleCodeMode() {
+    codeModeEnabled = !codeModeEnabled;
+    codeModeToggle.classList.toggle('active', codeModeEnabled);
+    showNotification(codeModeEnabled ? 'Code mode enabled' : 'Code mode disabled', 'info');
+}
+
+// AI Response Functions
 async function getAIResponse(message) {
+    let prompt = `You are ESAI-Alpha-1, created by The Ellerslie School AI Company. You are a helpful AI assistant.`;
+    
+    if (webSearchEnabled) {
+        prompt += ` You have access to web search capabilities. If the user asks about current events, recent information, or anything that might require up-to-date information, you can provide search suggestions and mention that you can help them find current information.`;
+        
+        // Add web search context if relevant
+        const searchContext = await getWebSearchContext(message);
+        if (searchContext) {
+            prompt += ` Here's some web search context: ${searchContext}`;
+        }
+    }
+    
+    if (codeModeEnabled) {
+        prompt += ` You are in code generation mode. When providing code, make sure it's well-formatted and include comments. The user can copy the code from a special code viewer.`;
+    }
+    
+    prompt += ` Respond to this message: "${message}"`;
+    
     const response = await fetch(GEMINI_API_URL, {
         method: 'POST',
         headers: {
@@ -273,7 +508,7 @@ async function getAIResponse(message) {
         body: JSON.stringify({
             contents: [{
                 parts: [{
-                    text: `You are ESAI-Alpha-1, created by The Ellerslie School AI Company. You are a helpful AI assistant. Respond to this message: "${message}"`
+                    text: prompt
                 }]
             }]
         })
@@ -284,9 +519,97 @@ async function getAIResponse(message) {
     }
     
     const data = await response.json();
-    return data.candidates[0].content.parts[0].text;
+    let aiResponse = data.candidates[0].content.parts[0].text;
+    
+    // If code mode is enabled and response contains code, show in code modal
+    if (codeModeEnabled && (aiResponse.includes('```') || aiResponse.includes('function') || aiResponse.includes('class'))) {
+        const codeMatch = aiResponse.match(/```(\w+)?\n([\s\S]*?)```/);
+        if (codeMatch) {
+            const language = codeMatch[1] || 'javascript';
+            const code = codeMatch[2];
+            
+            // Update code modal
+            languageSelect.value = language;
+            codeOutput.textContent = code;
+            updateCodeSyntax();
+            
+            // Show code modal
+            codeModal.classList.remove('hidden');
+            
+            // Remove code from main response
+            aiResponse = aiResponse.replace(/```(\w+)?\n([\s\S]*?)```/g, '[Code generated - see code viewer]');
+        }
+    }
+    
+    return aiResponse;
 }
 
+async function generateChatTitle(firstMessage) {
+    try {
+        const response = await fetch(GEMINI_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-goog-api-key': GEMINI_API_KEY
+            },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{
+                        text: `Generate a short, descriptive title (max 30 characters) for a chat that starts with this message: "${firstMessage}"`
+                    }]
+                }]
+            })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            return data.candidates[0].content.parts[0].text.trim().substring(0, 30);
+        }
+    } catch (error) {
+        console.error('Error generating title:', error);
+    }
+    
+    return 'New Chat';
+}
+
+async function getWebSearchContext(query) {
+    try {
+        // Simple search suggestions using DuckDuckGo Instant Answer API
+        const response = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`);
+        const data = await response.json();
+        
+        if (data.Abstract) {
+            return `Search result for "${query}": ${data.Abstract}`;
+        } else if (data.RelatedTopics && data.RelatedTopics.length > 0) {
+            const firstTopic = data.RelatedTopics[0];
+            if (firstTopic.Text) {
+                return `Search context for "${query}": ${firstTopic.Text.substring(0, 200)}...`;
+            }
+        }
+        
+        return `Search query: "${query}" - I can help you find more information about this topic.`;
+    } catch (error) {
+        console.error('Web search error:', error);
+        return `Search query: "${query}" - I can help you find information about this topic.`;
+    }
+}
+
+// Code Modal Functions
+function updateCodeSyntax() {
+    const language = languageSelect.value;
+    codeOutput.className = `code-${language}`;
+}
+
+function copyCode() {
+    const code = codeOutput.textContent;
+    navigator.clipboard.writeText(code).then(() => {
+        showNotification('Code copied to clipboard!', 'success');
+    }).catch(() => {
+        showNotification('Failed to copy code', 'error');
+    });
+}
+
+// Data Management Functions
 async function loadUsers() {
     try {
         const response = await fetch('/api/users');
@@ -320,6 +643,26 @@ async function saveUsers(users) {
     
     // Fallback to localStorage
     localStorage.setItem('users', JSON.stringify(users));
+}
+
+function loadChats() {
+    const savedChats = localStorage.getItem('chats');
+    if (savedChats) {
+        chats = JSON.parse(savedChats);
+        if (chats.length > 0) {
+            currentChatId = chats[0].id;
+            switchToChat(currentChatId);
+        } else {
+            createNewChat();
+        }
+    } else {
+        createNewChat();
+    }
+    renderChatList();
+}
+
+function saveChats() {
+    localStorage.setItem('chats', JSON.stringify(chats));
 }
 
 function showNotification(message, type = 'info') {
